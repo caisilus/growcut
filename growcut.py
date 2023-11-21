@@ -18,8 +18,10 @@ class GrowCut:
         self.previous_mask = initial_mask
         self.current_mask = np.copy(initial_mask)
         self.original_image = original
+        self.iteration = 0
 
-        self.strengths = (np.any(initial_mask, axis=-1)).astype(np.float64)
+        self.strengths = (np.any(initial_mask, axis=-1)).astype(np.float64) * 0.5
+        print(np.max(self.strengths))
         
         while (self.iteration < self.max_iterations):
             print("step")
@@ -39,7 +41,6 @@ class GrowCut:
         
         return neighbours
 
-    # @nb.jit(nopython=True, parallel=True)
     def growcut_step(self):
         for x in range(self.original_image.shape[0]):
             for y in range(self.original_image.shape[1]):

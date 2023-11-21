@@ -12,7 +12,9 @@ class ImageSegmentationApp:
         self.root.title("GrowCut Interactive Segmentation")
 
         self.original_image = None
-        self.segmantation_mask = None
+        self.canvas_image = None
+
+        self.segmentation_mask = None
         self.segmentation_output = None
 
         self.drawing = None
@@ -32,14 +34,14 @@ class ImageSegmentationApp:
         self.growcut_button = tk.Button(root, text="GrowCut", command=self.growcut_segmentation)
         self.growcut_button.grid(row=0, column=1, pady=10, padx=10)
 
-        self.original_image_canvas = tk.Canvas(root)
-        self.original_image_canvas.grid(row=1, column=0, columnspan=2)
+        self.canvas = tk.Canvas(root)
+        self.canvas.grid(row=1, column=0, columnspan=2)
 
-        self.original_image_canvas.bind("<B1-Motion>", self.draw_object_brush)
-        self.original_image_canvas.bind("<ButtonRelease-1>", self.stop_drawing)
+        self.canvas.bind("<B1-Motion>", self.draw_object_brush)
+        self.canvas.bind("<ButtonRelease-1>", self.stop_drawing)
         
-        self.original_image_canvas.bind("<B3-Motion>", self.draw_background_brush)
-        self.original_image_canvas.bind("<ButtonRelease-3>", self.stop_drawing)
+        self.canvas.bind("<B3-Motion>", self.draw_background_brush)
+        self.canvas.bind("<ButtonRelease-3>", self.stop_drawing)
 
         self.segmentation_output_label = tk.Label(root)
         self.segmentation_output_label.grid(row=2, column=0, columnspan=2)
@@ -52,19 +54,32 @@ class ImageSegmentationApp:
 
         self.original_image = cv.imread(file_path)
         self.original_image = cv.cvtColor(self.original_image, cv.COLOR_BGR2RGB)
-        self.segmantation_mask = np.zeros_like(self.original_image)
+        self.canvas_image = np.copy(self.original_image)
+        self.segmentation_mask = np.zeros_like(self.original_image)
         self.update_canvas()
 
     def update_canvas(self):
-        self.original_image_tk = ImageTk.PhotoImage(Image.fromarray(self.original_image))
-        self.original_image_canvas.config(width=self.original_image.shape[1], height=self.original_image.shape[0])
-        self.original_image_canvas.create_image(0, 0, anchor=tk.NW, image=self.original_image_tk)
+        self.canvas_image_tk = ImageTk.PhotoImage(Image.fromarray(self.canvas_image))
+        self.canvas.config(width=self.canvas_image.shape[1], height=self.canvas_image.shape[0])
+        self.canvas.create_image(0, 0, anchor=tk.NW, image=self.canvas_image_tk)
 
     def growcut_segmentation(self):
-        self.segmentation_output = self.growcut.growcut(self.original_image, self.segmantation_mask)
+        self.segmentation_mask = self.growcut.growcut(self.original_image, self.segmentation_mask)
+        self.write_mask_to_file()
+        self.compute_output_by_mask() 
         segmentation_output_tk = ImageTk.PhotoImage(Image.fromarray(self.segmentation_output))
         self.segmentation_output_label.config(image=segmentation_output_tk)
         self.segmentation_output_label.image = segmentation_output_tk
+
+    def write_mask_to_file(self, filename="mask.jpg"):
+        cv.imwrite(filename, self.segmentation_mask)
+
+    def compute_output_by_mask(self):
+        self.segmentation_output = np.zeros_like(self.original_image)
+        for x in range(self.segmentation_output.shape[0]):
+            for y in range(self.segmentation_output.shape[1]):
+                if (self.segmentation_mask[x, y] == np.array(self.object_color)).all():
+                    self.segmentation_output[x, y] = self.original_image[x, y]
 
     def draw_object_brush(self, event):
         self.draw_with_brush(event, "object")
@@ -78,13 +93,12 @@ class ImageSegmentationApp:
 
         self.drawing = brush_name
         x, y = event.x, event.y
-        img_x = int((x / self.original_image_canvas.winfo_width()) * self.original_image.shape[1])
-        img_y = int((y / self.original_image_canvas.winfo_height()) * self.original_image.shape[0])
+        img_x = int((x / self.canvas.winfo_width()) * self.original_image.shape[1])
+        img_y = int((y / self.canvas.winfo_height()) * self.original_image.shape[0])
         if self.last_x and self.last_y:
-            # Update the original image with the drawn brush
             color = self.object_color if self.drawing == "object" else self.background_color
-            cv.line(self.original_image, (self.last_x, self.last_y), (x, y), color, 5)
-            cv.line(self.segmantation_mask, (self.last_x, self.last_y), (x, y), color, 5)
+            cv.line(self.canvas_image, (self.last_x, self.last_y), (x, y), color, 5)
+            cv.line(self.segmentation_mask, (self.last_x, self.last_y), (x, y), color, 5)
             self.update_canvas()
 
         self.last_x, self.last_y = img_x, img_y
